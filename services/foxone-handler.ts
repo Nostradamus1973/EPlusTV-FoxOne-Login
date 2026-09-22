@@ -376,7 +376,7 @@ class FoxOneHandler {
         {
           headers: {
             'User-Agent': androidFoxOneUserAgent,
-            authorization: `Bearer ${this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken}`,
+            authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-apikey': this.appConfig.network.apikey,
             'x-platform-location': this.platform_location,
             'x-fox-zipcode': this.platform_zip,
