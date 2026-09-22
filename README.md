@@ -37,9 +37,15 @@ The application persists its configuration in `/opt/eplustv/config` when using t
 
 ### Portainer
 
-Create a new **Stack** in Portainer and deploy the repository's `foxone-profile-login` branch using the included `compose.yaml`.
+Create a new **Stack** in Portainer and deploy the repository's `foxone-profile-login` branch using the included `compose.yaml` on a normal Docker host.
 
-> **Note for nested/LXC Docker hosts:** some hosts require `security_opt: [apparmor=unconfined]` because the Docker daemon cannot load its default AppArmor profile from inside the LXC. That is an environment-specific workaround, not a general requirement for EplusTV.
+For a nested/LXC Docker host that cannot load Docker's default AppArmor profile, use the included `compose.lxc.yaml` override with the base Compose file:
+
+```bash
+docker compose -f compose.yaml -f compose.lxc.yaml up -d --build
+```
+
+The LXC override adds `apparmor=unconfined` only where that environment requires it; it is not a general EplusTV requirement.
 
 ### FOX One login
 
