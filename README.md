@@ -250,3 +250,20 @@ docker run -p 8000:8000 -v config_dir:/app/config -e PUID=$(id -u $USER) -e PGID
 ```
 
 Open the service in your web browser at `http://<ip>:8000`
+
+
+## FOX One direct login research
+
+This fork includes an experimental direct FOX One email/password login path based on the Profile API client flow documented in the companion research repository.
+
+The existing TV/device-code authentication path remains available. Direct login:
+
+- sends the user's credentials to the documented FOX One Profile API login endpoint;
+- generates a local device UUID for the login request;
+- stores authentication state only in EplusTV's existing local provider database;
+- tests whether the returned Profile access token is accepted by the existing FOX One DTC entitlement service before enabling the provider;
+- reuses the returned token for entitlement/event/playback requests when that compatibility test succeeds.
+
+No API key, password, access token, refresh token, or other live credential is committed to Git.
+
+The direct login path is intentionally experimental until it has been tested against an authorized FOX One account.
