@@ -190,6 +190,8 @@ const willPrelimTokenExpire = (token: IAdobePrelimAuthToken): boolean =>
 // Will auth token expire in the next day?
 const willAuthTokenExpire = (token: IAdobeAuthFoxOne): boolean =>
   new Date().valueOf() + 3600 * 1000 * 24 > (token?.tokenExpiration || 0);
+const willProfileTokenExpire = (token: IProfileAuth): boolean =>
+  new Date().valueOf() + 3600 * 1000 * 24 > (token?.tokenExpiration || 0);
 
 const checkEventSku = (entitlements, event: IFoxOneEvent): boolean => {
   if (event.content_sku && Array.isArray(entitlements)) {
@@ -720,6 +722,11 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     if (!this.adobe_prelim_auth_token || willPrelimTokenExpire(this.adobe_prelim_auth_token)) {
       console.log('Updating FOX One prelim token');
       await this.getPrelimToken();
+    }
+
+    if (this.profile_auth?.accessToken && !this.adobe_auth) {
+      if (willProfileTokenExpire(this.profile_auth)) console.log('FOX One Profile token needs refresh; direct re-authentication may be required');
+      return;
     }
 
     if (willAuthTokenExpire(this.adobe_auth)) {
