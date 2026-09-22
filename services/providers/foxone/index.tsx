@@ -90,6 +90,36 @@ foxone.put('/toggle-uhd', async c => {
   return c.html(<FoxOneBody enabled={enabled} tokens={tokens} channels={linear_channels} />);
 });
 
+foxone.post('/profile-login', async c => {
+  const body = await c.req.parseBody();
+  const email = String(body.email || '').trim();
+  const password = String(body.password || '');
+
+  if (!email || !password) {
+    return c.html(<Login message="Email and password are required." />);
+  }
+
+  const deviceId = crypto.randomUUID();
+  const result = await foxOneHandler.loginWithProfile(email, password, deviceId);
+
+  if (!result.ok) {
+    return c.html(<Login message={`Direct login failed (HTTP ${result.status || 'network'}): ${result.message}`} />);
+  }
+
+  const {affectedDocuments} = await db.providers.updateAsync<IProvider<TFoxOneTokens>, any>(
+    {name: 'foxone'},
+    {$set: {enabled: true}},
+    {returnUpdatedDocs: true},
+  );
+  const {tokens, linear_channels} = affectedDocuments as IProvider<TFoxOneTokens>;
+
+  scheduleEvents();
+
+  return c.html(<FoxOneBody enabled={true} tokens={tokens} open={true} channels={linear_channels} />, 200, {
+    'HX-Trigger': `{"HXToast":{"type":"success","body":"FOX One direct login succeeded"}}`,
+  });
+});
+
 foxone.get('/tve-login/:code', async c => {
   const code = c.req.param('code');
 
