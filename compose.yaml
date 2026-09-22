@@ -10,7 +10,3 @@ services:
       - "8000:8000"
     volumes:
       - /opt/eplustv/config:/app/config
-    # Required on the current privileged LXC host because Docker cannot load
-    # docker-default from inside the container. Remove on a normal Docker host.
-    security_opt:
-      - apparmor=unconfined
