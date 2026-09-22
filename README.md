@@ -22,7 +22,7 @@ The server exposes 4 main endpoints:
 | /linear-xmltv.xml | The linear schedule that you'll import into your client (only used when using the dedicated linear channels option) - Not needed for Channels DVR |
 
 # Running
-The recommended way of running is to pull the image from [Docker Hub](https://hub.docker.com/r/tonywagner/eplustv).
+The recommended way of running this fork is with Docker Compose from the repository. The Compose configuration builds the FOX One-enabled image locally and keeps application state in a persistent host directory.
 
 ## Environment Variables
 | Environment Variable | Description | Required? | Default |
@@ -237,20 +237,39 @@ Available for free
 
 
 ## Docker Run
-By default, the easiest way to get running is:
+From the repository root, build and start the service with:
 
 ```bash
-docker run -p 8000:8000 -v config_dir:/app/config tonywagner/eplustv
+docker compose up -d --build
 ```
 
-If you run into permissions issues:
+The Compose service is named `eplustv`, exposes port `8000`, persists `/app/config` to `/opt/eplustv/config`, and uses `restart: unless-stopped`.
+
+For a one-off Docker run, the equivalent is:
 
 ```bash
-docker run -p 8000:8000 -v config_dir:/app/config -e PUID=$(id -u $USER) -e PGID=$(id -g $USER) tonywagner/eplustv
+docker run -d --name eplustv --restart unless-stopped -p 8000:8000 -v /opt/eplustv/config:/app/config eplustv:foxone-profile-login
 ```
+
+On the privileged LXC development host used for this project, Docker also requires `--security-opt apparmor=unconfined`; the included Compose file contains that host-specific setting. Remove it when deploying to a normal Docker host where Docker can load its default AppArmor profile.
 
 Open the service in your web browser at `http://<ip>:8000`
 
+
+
+### Docker Compose
+
+The repository includes `compose.yaml` so the service can be rebuilt and restarted without manually reproducing the Docker command:
+
+```bash
+docker compose up -d --build
+```
+
+To stop it without deleting the persistent configuration:
+
+```bash
+docker compose down
+```
 
 ## FOX One direct login research
 
