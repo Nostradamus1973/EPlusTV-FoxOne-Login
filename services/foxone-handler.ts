@@ -845,7 +845,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
             headers: {
               'Accept-Encoding': 'gzip, deflate, br, zstd',
               'User-Agent': androidFoxOneUserAgent,
-              authorization: this.adobe_auth.accessToken,
+              authorization: this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken,
               'x-api-key': this.appConfig.network.apikey,
               'x-platform-location': this.platform_location,
               'x-device-capabilities': deviceCapabilities,
