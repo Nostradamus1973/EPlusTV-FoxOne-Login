@@ -376,7 +376,7 @@ class FoxOneHandler {
         {
           headers: {
             'User-Agent': androidFoxOneUserAgent,
-            authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
+            authorization: `Bearer ${this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken}`,
             'x-fox-apikey': this.appConfig.network.apikey,
             'x-platform-location': this.platform_location,
             'x-fox-zipcode': this.platform_zip,
@@ -617,7 +617,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
           {
             headers: {
               'user-agent': androidFoxOneUserAgent,
-              'authorization': `bearer ${this.adobe_auth.accessToken}`,
+              'authorization': `bearer ${this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken}`,
               'x-api-key': this.appConfig.network.apikey,
               'content-type': 'application/json'
             }
@@ -685,7 +685,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
 
     try {
       const {data, status} = await axios.post<any>(
-        'https://prod-bifrost-api.foxplus.com/account/login/v2',
+        'https://id.fox.com/account/login/v2',
         {email, password, deviceId, isTermsOfServiceAgreementNeeded: false, receipts: []},
         {headers: {'Content-Type': 'application/json; charset=utf-8', 'User-Agent': androidFoxOneUserAgent, 'x-api-key': this.appConfig.network.apikey, 'x-delegated-auth-flow': 'true'}},
       );
@@ -891,6 +891,9 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
             'User-Agent': androidFoxOneUserAgent,
             authorization: this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken,
             'x-api-key': this.appConfig.network.apikey,
+            'x-signature-enabled': 'true',
+            'x-refresh-token': this.profile_auth?.refreshToken || '',
+            'x-delegated-auth-flow': 'true',
             'x-platform-location': this.platform_location,
             'x-fox-zipcode': this.platform_zip,
           },
@@ -1001,6 +1004,11 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
   };
 
   public authenticateRegCode = async (showAuthnError = true): Promise<boolean> => {
+    if (!this.adobe_auth?.accessToken && !this.adobe_prelim_auth_token?.accessToken) {
+      if (showAuthnError) console.log("FOX One is not authenticated yet");
+      return false;
+    }
+
     try {
       if (!this.appConfig) {
         await this.getAppConfig();
