@@ -34,6 +34,13 @@ interface IAppConfig {
   };
 }
 
+interface IProfileAuth {
+  accessToken: string;
+  refreshToken?: string;
+  idToken?: string;
+  tokenExpiration?: number;
+}
+
 interface IAdobePrelimAuthToken {
   accessToken: string;
   tokenExpiration: number;
@@ -195,6 +202,7 @@ class FoxOneHandler {
   public adobe_device_id?: string;
   public adobe_prelim_auth_token?: IAdobePrelimAuthToken;
   public adobe_auth?: IAdobeAuthFoxOne;
+  public profile_auth?: IProfileAuth;
 
   private platform_location?: string;
   private platform_zip?: string;
@@ -669,6 +677,39 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     }
   }
 
+  public loginWithProfile = async (email: string, password: string, deviceId: string): Promise<{ok: boolean; status: number; message: string}> => {
+    if (!this.appConfig) await this.getAppConfig();
+    if (!this.appConfig?.network?.apikey) return {ok: false, status: 0, message: 'FOX One app configuration did not provide an API key'};
+
+    try {
+      const {data, status} = await axios.post<any>(
+        'https://prod-bifrost-api.foxplus.com/account/login/v2',
+        {email, password, deviceId, isTermsOfServiceAgreementNeeded: false, receipts: []},
+        {headers: {'Content-Type': 'application/json; charset=utf-8', 'User-Agent': androidFoxOneUserAgent, 'x-api-key': this.appConfig.network.apikey, 'x-delegated-auth-flow': 'true'}},
+      );
+
+      const accessToken = data?.accessToken;
+      if (!accessToken) return {ok: false, status, message: 'Profile API login returned no access token'};
+
+      this.profile_auth = {accessToken, refreshToken: data?.refreshToken, idToken: data?.idToken, tokenExpiration: data?.tokenExpiration ?? data?.expiresAt ?? data?.expiresIn};
+      this.adobe_device_id = deviceId;
+      this.adobe_prelim_auth_token = {accessToken, tokenExpiration: this.profile_auth.tokenExpiration || Date.now() + 3600000, viewerId: data?.viewerId || '', deviceId, profileId: data?.profileId || ''};
+
+      const entitlementOk = await this.getEntitlements();
+      if (!entitlementOk) {
+        this.adobe_prelim_auth_token = undefined;
+        return {ok: false, status, message: 'Profile login succeeded, but the FOX One DTC entitlement service rejected the returned access token'};
+      }
+
+      await this.save();
+      return {ok: true, status, message: 'Direct FOX One Profile login succeeded and the returned token was accepted by the DTC entitlement service'};
+    } catch (e: any) {
+      const status = e?.response?.status || 0;
+      const detail = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'request failed';
+      return {ok: false, status, message: `Profile API login failed: ${detail}`};
+    }
+  };
+
   public refreshTokens = async () => {
     const {enabled} = await db.providers.findOneAsync<IProvider<TFoxOneTokens, IFoxOneMeta>>({name: 'foxone'});
 
@@ -828,7 +869,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     }
   };
 
-  private getEntitlements = async (): Promise<void> => {
+  private getEntitlements = async (): Promise<boolean> => {
     try {
       if (!this.appConfig) {
         await this.getAppConfig();
@@ -882,8 +923,10 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
 
         this.contentEnt = finalEntitlements;
       }
+      return true;
     } catch (e) {
       console.error(e);
+      return false;
     }
   };
 
@@ -996,11 +1039,12 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
 
   private load = async (): Promise<void> => {
     const {tokens} = await db.providers.findOneAsync<IProvider<TFoxOneTokens>>({name: 'foxone'});
-    const {adobe_device_id, adobe_auth, adobe_prelim_auth_token} = tokens;
+    const {adobe_device_id, adobe_auth, adobe_prelim_auth_token, profile_auth} = tokens;
 
     this.adobe_device_id = adobe_device_id;
     this.adobe_auth = adobe_auth;
     this.adobe_prelim_auth_token = adobe_prelim_auth_token;
+    this.profile_auth = profile_auth;
   };
 
   private loadJSON = () => {
