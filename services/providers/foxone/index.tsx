@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {Hono} from 'hono';
 
 import {db} from '@/services/database';
