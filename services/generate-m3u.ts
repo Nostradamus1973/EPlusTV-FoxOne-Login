@@ -2,7 +2,7 @@ import _ from 'lodash';
 import moment from 'moment-timezone';
 
 import {db} from './database';
-import {CHANNELS} from './channels';
+import {CHANNELS, getLinearChannelOffset} from './channels';
 import {getLinearStartChannel, getNumberOfChannels, getStartChannel} from './misc-db-service';
 import {IEntry} from './shared-interfaces';
 
@@ -10,6 +10,7 @@ export const generateM3u = async (uri: string, linear = false, excludeGracenote 
   const startChannel = await getStartChannel();
   const numOfChannels = await getNumberOfChannels();
   const linearStartChannel = await getLinearStartChannel();
+  const linearChannelOffset = await getLinearChannelOffset();
 
   let m3uFile = '#EXTM3U';
 
@@ -35,7 +36,7 @@ export const generateM3u = async (uri: string, linear = false, excludeGracenote 
         continue;
       }
 
-      const channelNum = parseInt(key, 10) + linearStartChannel;
+      const channelNum = parseInt(key, 10) - linearChannelOffset + linearStartChannel;
 
       if (excludeGracenote) {
         m3uFile = `${m3uFile}\n#EXTINF:0 tvg-id="${channelNum}.eplustv" channel-number="${channelNum}" tvg-chno="${channelNum}" tvg-name="${val.id}" group-title="EPlusTV", ${val.name}`;
