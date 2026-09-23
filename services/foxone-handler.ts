@@ -759,13 +759,9 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         await this.getAppConfig();
       }
 
-      let cdn = '';  ///// leaving cdn blank here and in the while loop will select the first stream offered up.  Changing to akamai, fastly or cloudfront here and as !== in the while loop will default to that cdn
       let data;
 
-      while (cdn === '') { ///// If only want one use (cdn !== 'selected cdn of choice') can be akamai, cloudfront or fastly
-        data = await this.getStreamData(eventId);
-        cdn = data.stream.cdn;
-      }
+      data = await this.getStreamData(eventId);
 
       if (!data || !data?.stream?.playbackUrl) {
         throw new Error('Could not get stream data. Event might be upcoming, ended, or in blackout...');
@@ -845,7 +841,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
             headers: {
               'Accept-Encoding': 'gzip, deflate, br, zstd',
               'User-Agent': androidFoxOneUserAgent,
-              authorization: this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken,
+              authorization: this.profile_auth?.accessToken || this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken,
               'x-api-key': this.appConfig.network.apikey,
               'x-platform-location': this.platform_location,
               'x-device-capabilities': deviceCapabilities,
@@ -853,8 +849,10 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
           },
         );
 
-        watchData = data;
-        break;
+        if (data?.stream?.playbackUrl) {
+          watchData = data;
+          break;
+        }
       } catch (e) {
         console.log(
           `Could not get stream data for ${streamOrder[a]}. ${
