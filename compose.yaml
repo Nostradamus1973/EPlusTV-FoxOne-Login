@@ -1,0 +1,12 @@
+services:
+  eplustv:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eplustv:foxone-profile-login
+    container_name: eplustv
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - /opt/eplustv/config:/app/config

@@ -356,9 +356,21 @@ export const CHANNELS = {
 };
 /* eslint-enable sort-keys-custom-order-fix/sort-keys-custom-order-fix */
 
+export const getLinearChannelOffset = async (): Promise<number> => {
+  for (const key in CHANNELS.MAP) {
+    const val = CHANNELS.MAP[key];
+    if (val.checkChannelEnabled && !(await val.checkChannelEnabled())) {
+      continue;
+    }
+    return parseInt(key, 10);
+  }
+  return 0;
+};
+
 export const calculateChannelNumber = async (channelNum: string): Promise<number | string> => {
   const useLinear = await usesLinear();
   const linearStartChannel = await getLinearStartChannel();
+  const linearChannelOffset = await getLinearChannelOffset();
 
   const chanNum = parseInt(channelNum, 10);
 
@@ -366,7 +378,7 @@ export const calculateChannelNumber = async (channelNum: string): Promise<number
     return channelNum;
   }
 
-  const linearChannel = CHANNELS.MAP[chanNum - linearStartChannel];
+  const linearChannel = CHANNELS.MAP[chanNum - linearStartChannel + linearChannelOffset];
 
   if (linearChannel) {
     return linearChannel.id;
@@ -383,12 +395,13 @@ export const calculateChannelFromName = async (channelName: string): Promise<num
   }
 
   const linearStartChannel = await getLinearStartChannel();
+  const linearChannelOffset = await getLinearChannelOffset();
 
   let channelNum = Number.MAX_SAFE_INTEGER;
 
   _.forOwn(CHANNELS.MAP, (val, key) => {
     if (val.id === channelName) {
-      channelNum = parseInt(key, 10) + linearStartChannel;
+      channelNum = parseInt(key, 10) - linearChannelOffset + linearStartChannel;
     }
   });
 
