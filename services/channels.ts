@@ -1,3 +1,4 @@
+Pseudo-terminal will not be allocated because stdin is not a terminal.
 import _ from 'lodash';
 
 import {foxOneHandler} from './foxone-handler';
@@ -359,11 +360,14 @@ export const CHANNELS = {
 export const getLinearChannelOffset = async (): Promise<number> => {
   for (const key in CHANNELS.MAP) {
     const val = CHANNELS.MAP[key];
+
     if (val.checkChannelEnabled && !(await val.checkChannelEnabled())) {
       continue;
     }
+
     return parseInt(key, 10);
   }
+
   return 0;
 };
 
