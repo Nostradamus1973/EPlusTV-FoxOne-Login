@@ -23,6 +23,7 @@ interface IAppConfig {
       regcodeUrl: string;
       checkAdobeUrl: string;
       loginUrl: string;
+      refreshTokenUrl: string;
     };
     auth: {
       loginWebsiteUrl: string;
@@ -712,6 +713,83 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     }
   };
 
+  private refreshProfileToken = async (): Promise<boolean> => {
+    const refreshToken = this.profile_auth?.refreshToken;
+
+    if (!refreshToken) {
+      console.log('FOX One Profile refresh skipped: no saved refresh token');
+      return false;
+    }
+
+    if (!this.appConfig) {
+      await this.getAppConfig();
+    }
+
+    const refreshTokenUrl = this.appConfig?.network?.identity?.refreshTokenUrl;
+    const apiKey = this.appConfig?.network?.apikey;
+    const identityHost = this.appConfig?.network?.identity?.host;
+
+    if (!refreshTokenUrl || !apiKey || !identityHost) {
+      console.error('FOX One Profile refresh skipped: incomplete identity configuration');
+      return false;
+    }
+
+    try {
+      const url = identityHost + refreshTokenUrl.replace('{REFRESH_TOKEN}', encodeURIComponent(refreshToken));
+      const {data, status} = await axios.post<any>(url, undefined, {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'User-Agent': androidFoxOneUserAgent,
+          'x-api-key': apiKey,
+          authorization: this.profile_auth?.accessToken || '',
+          'x-delegated-auth-flow': 'true',
+        },
+      });
+
+      const accessToken = data?.accessToken;
+      if (!accessToken) {
+        console.error('FOX One Profile refresh returned no access token (HTTP ' + status + ')');
+        return false;
+      }
+
+      const tokenExpiration = data?.tokenExpiration ?? data?.expiresAt;
+      const normalizedExpiration =
+        typeof tokenExpiration === 'number' && tokenExpiration > 0 && tokenExpiration < 1e12
+          ? tokenExpiration * 1000
+          : tokenExpiration;
+
+      this.profile_auth = {
+        ...this.profile_auth,
+        accessToken,
+        refreshToken: data?.refreshToken || refreshToken,
+        idToken: data?.idToken || this.profile_auth?.idToken,
+        tokenExpiration: normalizedExpiration,
+      };
+
+      this.adobe_prelim_auth_token = {
+        ...this.adobe_prelim_auth_token,
+        accessToken,
+        tokenExpiration: normalizedExpiration || Date.now() + 3600000,
+      };
+
+      await this.save();
+
+      const entitlementOk = await this.getEntitlements();
+      if (!entitlementOk) {
+        console.error('FOX One Profile refresh succeeded, but entitlement validation failed');
+        return false;
+      }
+
+      console.log('FOX One Profile token refreshed successfully');
+      return true;
+    } catch (e: any) {
+      const status = e?.response?.status || 0;
+      const detail = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'request failed';
+      console.error('FOX One Profile token refresh failed (HTTP ' + (status || 'network') + '): ' + detail);
+      return false;
+    }
+  };
+
   public refreshTokens = async () => {
     const {enabled} = await db.providers.findOneAsync<IProvider<TFoxOneTokens, IFoxOneMeta>>({name: 'foxone'});
 
@@ -725,7 +803,10 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     }
 
     if (this.profile_auth?.accessToken && !this.adobe_auth) {
-      if (willProfileTokenExpire(this.profile_auth)) console.log('FOX One Profile token needs refresh; direct re-authentication may be required');
+      if (willProfileTokenExpire(this.profile_auth)) {
+        console.log('FOX One Profile token needs refresh; using saved refresh token');
+        await this.refreshProfileToken();
+      }
       return;
     }
 
