@@ -88,6 +88,7 @@ interface IFoxOneMeta {
 }
 
 const foxOneConfigPath = path.join(configPath, 'foxone_tokens.json');
+const FOX_ONE_HOME_ZIP = process.env.FOX_ONE_HOME_ZIP || '02891';
 
 const getMaxRes = (res: string) => {
   switch (res) {
@@ -600,7 +601,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     const zipCodeData = (locatorData?.data?.results || [])[0];
 
     this.platform_location = locationData?.['x-platform-location'] || 'Unknown Location';
-    this.platform_zip = zipCodeData?.['zip_code'] || '00000';
+    this.platform_zip = FOX_ONE_HOME_ZIP;
   }
 
   public async getUserEntitlements(): Promise<void> {
