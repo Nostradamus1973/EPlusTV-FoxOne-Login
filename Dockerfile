@@ -1,18 +1,14 @@
-FROM alpine:latest
+FROM node:18-alpine
 
-RUN mkdir -p /etc/udhcpc ; echo 'RESOLV_CONF="no"' >> /etc/udhcpc/udhcpc.conf
+RUN apk add --no-cache su-exec shadow yt-dlp \
+    && mkdir -p /etc/udhcpc \
+    && printf 'RESOLV_CONF="no"\n' > /etc/udhcpc/udhcpc.conf
 
-RUN apk add --update nodejs npm su-exec shadow yt-dlp
-
-RUN rm -rf /var/cache/apk/*
-
-RUN mkdir /app
 WORKDIR /app
-
-COPY . .
-
+COPY package*.json ./
 RUN npm ci
 
+COPY . .
 RUN chmod +x entrypoint.sh
 
 ENTRYPOINT ["./entrypoint.sh"]

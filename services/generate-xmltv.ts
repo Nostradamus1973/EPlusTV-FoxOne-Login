@@ -1,9 +1,10 @@
+Pseudo-terminal will not be allocated because stdin is not a terminal.
 import _ from 'lodash';
 import xml from 'xml';
 import moment from 'moment';
 
 import {db} from './database';
-import {calculateChannelFromName, CHANNELS} from './channels';
+import {calculateChannelFromName, CHANNELS, getLinearChannelOffset} from './channels';
 import {IEntry} from './shared-interfaces';
 import {getLinearStartChannel, getNumberOfChannels, getStartChannel, xmltvPadding} from './misc-db-service';
 
@@ -49,6 +50,7 @@ export const generateXml = async (linear = false): Promise<xml> => {
   const startChannel = await getStartChannel();
   const numOfChannels = await getNumberOfChannels();
   const linearStartChannel = await getLinearStartChannel();
+  const linearChannelOffset = await getLinearChannelOffset();
   const xmltvPadded = await xmltvPadding();
 
   const wrap: any = {
@@ -75,7 +77,7 @@ export const generateXml = async (linear = false): Promise<xml> => {
         }
       }
 
-      const channelNum = parseInt(key, 10) + linearStartChannel;
+      const channelNum = parseInt(key, 10) - linearChannelOffset + linearStartChannel;
 
       wrap.tv.push({
         channel: [

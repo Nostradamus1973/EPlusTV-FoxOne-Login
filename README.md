@@ -1,3 +1,82 @@
+<div align="center">
+
+# EPlusTV — FOX One Direct Login (Experimental)
+
+**Test branch:** `foxone-profile-login`  
+**Current tested build:** `1eb5e4d`
+
+> ⚠️ **Experimental build for testers.** This fork adds direct FOX One email/password authentication to EplusTV. It has been tested with an authorized FOX One account, but it is not yet presented as a stable upstream release.
+
+</div>
+
+## Quick start for testers
+
+If you want to try the FOX One direct-login work, use the **`foxone-profile-login` branch**. The default `master` branch does not contain the experimental login path.
+
+### Requirements
+
+- Docker Engine with Docker Compose support, or Portainer with Docker Compose/Stacks support
+- An **authorized FOX One account** that you are permitted to use
+- Port 8000 available on the host, or a different host port mapped to container port 8000
+
+### Docker Compose
+
+From a clone of this repository:
+
+```bash
+git clone -b foxone-profile-login https://github.com/Nostradamus1973/EPlusTV-FoxOne-Login.git
+cd EPlusTV-FoxOne-Login
+docker compose up -d --build
+```
+
+Then open:
+
+`http://<host-ip>:8000`
+
+The application persists its configuration in `/opt/eplustv/config` when using the included Compose file.
+
+### Portainer
+
+Create a new **Stack** in Portainer and deploy the repository's `foxone-profile-login` branch using the included `compose.yaml` on a normal Docker host.
+
+For a nested/LXC Docker host that cannot load Docker's default AppArmor profile, use the included `compose.lxc.yaml` override with the base Compose file:
+
+```bash
+docker compose -f compose.yaml -f compose.lxc.yaml up -d --build
+```
+
+The LXC override adds `apparmor=unconfined` only where that environment requires it; it is not a general EplusTV requirement.
+
+### FOX One login
+
+The FOX One provider keeps the existing TV/device-code authentication path and adds an experimental **direct email/password** login option.
+
+Use your own authorized FOX One credentials. Credentials are entered through the EplusTV web UI and are not intended to be placed in the repository, README, Docker image, or source code.
+
+The direct login flow:
+
+1. Sends the supplied credentials to the FOX One Profile API login flow.
+2. Generates a local device UUID for the login request.
+3. Validates the returned Profile access token against the FOX One DTC entitlement service.
+4. Enables the provider only when that compatibility check succeeds.
+5. Reuses the accepted token for entitlement, event, and playback requests.
+
+**Do not open an issue or pull request containing passwords, access tokens, refresh tokens, cookies, or other account secrets.**
+
+## Reporting problems
+
+When reporting a problem, include:
+
+- EplusTV version/commit
+- Whether you used direct login or the existing TV/device-code flow
+- Docker/Portainer version
+- Relevant error messages or sanitized logs
+- The provider/channel/event involved
+
+Remove credentials and authentication tokens before posting logs.
+
+---
+
 <p align="center">
   <img src="https://i.imgur.com/FIGZdR3.png">
 </p>
@@ -22,7 +101,7 @@ The server exposes 4 main endpoints:
 | /linear-xmltv.xml | The linear schedule that you'll import into your client (only used when using the dedicated linear channels option) - Not needed for Channels DVR |
 
 # Running
-The recommended way of running is to pull the image from [Docker Hub](https://hub.docker.com/r/tonywagner/eplustv).
+The recommended way of running this fork is with Docker Compose from the repository. The Compose configuration builds the FOX One-enabled image locally and keeps application state in a persistent host directory.
 
 ## Environment Variables
 | Environment Variable | Description | Required? | Default |
@@ -237,16 +316,52 @@ Available for free
 
 
 ## Docker Run
-By default, the easiest way to get running is:
+From the repository root, build and start the service with:
 
 ```bash
-docker run -p 8000:8000 -v config_dir:/app/config tonywagner/eplustv
+docker compose up -d --build
 ```
 
-If you run into permissions issues:
+The Compose service is named `eplustv`, exposes port `8000`, persists `/app/config` to `/opt/eplustv/config`, and uses `restart: unless-stopped`.
+
+For a one-off Docker run, the equivalent is:
 
 ```bash
-docker run -p 8000:8000 -v config_dir:/app/config -e PUID=$(id -u $USER) -e PGID=$(id -g $USER) tonywagner/eplustv
+docker run -d --name eplustv --restart unless-stopped -p 8000:8000 -v /opt/eplustv/config:/app/config eplustv:foxone-profile-login
 ```
+
+On the privileged LXC development host used for this project, Docker also requires `--security-opt apparmor=unconfined`; the included Compose file contains that host-specific setting. Remove it when deploying to a normal Docker host where Docker can load its default AppArmor profile.
 
 Open the service in your web browser at `http://<ip>:8000`
+
+
+
+### Docker Compose
+
+The repository includes `compose.yaml` so the service can be rebuilt and restarted without manually reproducing the Docker command:
+
+```bash
+docker compose up -d --build
+```
+
+To stop it without deleting the persistent configuration:
+
+```bash
+docker compose down
+```
+
+## FOX One direct login research
+
+This fork includes an experimental direct FOX One email/password login path based on the Profile API client flow documented in the companion research repository.
+
+The existing TV/device-code authentication path remains available. Direct login:
+
+- sends the user's credentials to the documented FOX One Profile API login endpoint;
+- generates a local device UUID for the login request;
+- stores authentication state only in EplusTV's existing local provider database;
+- tests whether the returned Profile access token is accepted by the existing FOX One DTC entitlement service before enabling the provider;
+- reuses the returned token for entitlement/event/playback requests when that compatibility test succeeds.
+
+No API key, password, access token, refresh token, or other live credential is committed to Git.
+
+The direct login path is intentionally experimental until it has been tested against an authorized FOX One account.
