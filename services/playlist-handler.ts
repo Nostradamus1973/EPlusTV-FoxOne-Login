@@ -3,9 +3,10 @@ import axios from 'axios';
 import _ from 'lodash';
 
 import {userAgent} from './user-agent';
-import {IHeaders, THeaderInfo} from './shared-interfaces';
+import {IHeaders, THeaderInfo, TChannelPlaybackInfo} from './shared-interfaces';
 import {cacheLayer, promiseCache} from './caching';
 import {proxySegments} from './misc-db-service';
+import {getFoxOneChunklistCacheKey, getFoxOneProxyBaseUrls} from './foxone-playback';
 
 const isRelativeUrl = (url?: string): boolean => (url?.startsWith('http') ? false : true);
 const cleanUrl = (url: string): string => url.replace(/(\[.*\])/gm, '').replace(/(?<!:)\/\//gm, '/');
@@ -96,14 +97,18 @@ export class PlaylistHandler {
   private segmentDuration: number;
   private network: string;
   private eventId: string | number;
+  private refreshPlayback?: () => Promise<TChannelPlaybackInfo>;
+  private refreshPromise?: Promise<void>;
 
-  constructor(headers: THeaderInfo, appUrl: string, channel: string, network: string, eventId: string | number) {
+  constructor(headers: THeaderInfo, appUrl: string, channel: string, network: string, eventId: string | number, refreshPlayback?: () => Promise<TChannelPlaybackInfo>) {
     this.headers = headers;
     this.channel = channel;
-    this.baseUrl = `${appUrl}/channels/${channel}/`;
-    this.baseProxyUrl = `${appUrl}/chunklist/${channel}/`;
+    const foxOneProxyUrls = network === 'foxone' ? getFoxOneProxyBaseUrls(channel) : undefined;
+    this.baseUrl = foxOneProxyUrls?.baseUrl ?? appUrl + '/channels/' + channel + '/';
+    this.baseProxyUrl = foxOneProxyUrls?.baseProxyUrl ?? appUrl + '/chunklist/' + channel + '/';
     this.network = network;
     this.eventId = eventId;
+    this.refreshPlayback = refreshPlayback;
   }
 
   public async initialize(manifestUrl: string): Promise<void> {
@@ -115,14 +120,13 @@ export class PlaylistHandler {
     try {
       const headers = await this.getHeaders();
       return cacheLayer.getDataFromSegment(segmentId, headers, this.network);
-    } catch (e) {
-      console.log('Could not get segment or key properly!');
-      console.error(e);
-      //throw e;
+    } catch (e: any) {
+      const status = e?.response?.status;
+      console.warn('Segment/key fetch failed for ' + this.network + ' (HTTP ' + (status || 'network') + '). Details withheld to protect signed URLs.');
     }
   }
 
-  public async parseManifest(manifestUrl: string, headers: IHeaders): Promise<void> {
+  public async parseManifest(manifestUrl: string, headers: IHeaders): Promise<boolean> {
     try {
       if (!('Accept-Encoding' in headers)) {
         headers['Accept-Encoding'] = 'identity';
@@ -136,7 +140,7 @@ export class PlaylistHandler {
         request,
         headers: resHeaders,
       } = await axios.get<string>(manifestUrl, {
-        headers: headers,
+        headers,
       });
 
       const processedManifest = this.network === 'foxone' ? handleDateranges(manifest, this.network) : manifest;
@@ -153,7 +157,7 @@ export class PlaylistHandler {
           const parsedUrl = new URL(realManifestUrl);
           urlParams = parsedUrl.search;
         } catch (error) {
-          console.error('Invalid URL provided:', error);
+          console.warn('Could not parse FOX One manifest URL; query forwarding skipped.');
           urlParams = '';
         }
       }
@@ -161,6 +165,8 @@ export class PlaylistHandler {
       const playlist = HLS.parse(processedManifest);
 
       /** Sort playlist so highest resolution is first in list (Emby workaround) */
+      const isUHDStream = playlist.variants?.some(variant => variant.resolution?.width >= 3840);
+
       playlist.variants?.sort((v1, v2) => {
         if (v1.bandwidth > v2.bandwidth) {
           return -1;
@@ -173,19 +179,11 @@ export class PlaylistHandler {
         return 0;
       });
 
-      const isUHDStream = playlist.variants?.some(variant => variant.resolution?.width >= 3840);
+
 
       const clonedManifest = updateVersion(HLS.stringify(playlist));
       let updatedManifest = clonedManifest;
 
-      const cleanForChunklist = (url: string): string => {
-        try {
-          const parsedUrl = new URL(url);
-          return parsedUrl.pathname.split('/').pop()?.replace(/\.m3u8$/, '') || 'chunklist';
-        } catch {
-          return url.split('/').pop()?.replace(/\.m3u8$/, '') || 'chunklist';
-        }
-      };
 
       const mergeQueryParams = (baseUrl: string, params: string): string => {
         try {
@@ -229,9 +227,9 @@ export class PlaylistHandler {
         audioTracks.forEach(track => {
           if (track && track[1]) {
             const fullChunklistUrl = parseReplacementUrl(track[1], realManifestUrl);
-            const chunklistUrlForName = this.network === 'foxone' && isUHDStream ? cleanForChunklist(fullChunklistUrl) : fullChunklistUrl;
+            const chunklistUrlForName = this.network === 'foxone' ? getFoxOneChunklistCacheKey(fullChunklistUrl) : fullChunklistUrl;
             const chunklistName = cacheLayer.getChunklistFromUrl(chunklistUrlForName);
-            if (this.network === 'foxone' && isUHDStream) {
+            if (this.network === 'foxone') {
               const fullUrl = urlParams ? mergeQueryParams(fullChunklistUrl, urlParams) : fullChunklistUrl;
               this.chunklistUrlMap.set(chunklistName, fullUrl);
             }
@@ -243,9 +241,9 @@ export class PlaylistHandler {
         subTracks.forEach(track => {
           if (track && track[1]) {
             const fullChunklistUrl = parseReplacementUrl(track[1], realManifestUrl);
-            const chunklistUrlForName = this.network === 'foxone' && isUHDStream ? cleanForChunklist(fullChunklistUrl) : fullChunklistUrl;
+            const chunklistUrlForName = this.network === 'foxone' ? getFoxOneChunklistCacheKey(fullChunklistUrl) : fullChunklistUrl;
             const chunklistName = cacheLayer.getChunklistFromUrl(chunklistUrlForName);
-            if (this.network === 'foxone' && isUHDStream) {
+            if (this.network === 'foxone') {
               const fullUrl = urlParams ? mergeQueryParams(fullChunklistUrl, urlParams) : fullChunklistUrl;
               this.chunklistUrlMap.set(chunklistName, fullUrl);
             }
@@ -258,7 +256,7 @@ export class PlaylistHandler {
             playlist.media.forEach(media => {
               if (media.type === 'AUDIO' || media.type === 'SUBTITLES') {
                 const fullChunklistUrl = parseReplacementUrl(media.uri, realManifestUrl);
-                const chunklistUrlForName = cleanForChunklist(fullChunklistUrl);
+                const chunklistUrlForName = getFoxOneChunklistCacheKey(fullChunklistUrl);
                 const chunklistName = cacheLayer.getChunklistFromUrl(chunklistUrlForName);
                 const fullUrl = urlParams ? mergeQueryParams(fullChunklistUrl, urlParams) : fullChunklistUrl;
                 this.chunklistUrlMap.set(chunklistName, fullUrl);
@@ -272,7 +270,7 @@ export class PlaylistHandler {
                 const uriMatch = line.match(/URI="([^"]+?)"/);
                 if (uriMatch && uriMatch[1]) {
                   const fullChunklistUrl = parseReplacementUrl(uriMatch[1], realManifestUrl);
-                  const chunklistUrlForName = cleanForChunklist(fullChunklistUrl);
+                  const chunklistUrlForName = getFoxOneChunklistCacheKey(fullChunklistUrl);
                   const chunklistName = cacheLayer.getChunklistFromUrl(chunklistUrlForName);
                   const fullUrl = urlParams ? mergeQueryParams(fullChunklistUrl, urlParams) : fullChunklistUrl;
                   this.chunklistUrlMap.set(chunklistName, fullUrl);
@@ -286,9 +284,9 @@ export class PlaylistHandler {
 
       playlist.variants?.forEach(variant => {
         const fullChunklistUrl = parseReplacementUrl(variant.uri, realManifestUrl);
-        const chunklistUrlForName = this.network === 'foxone' && isUHDStream ? cleanForChunklist(fullChunklistUrl) : fullChunklistUrl;
+        const chunklistUrlForName = this.network === 'foxone' ? getFoxOneChunklistCacheKey(fullChunklistUrl) : fullChunklistUrl;
         const chunklistName = cacheLayer.getChunklistFromUrl(chunklistUrlForName);
-        if (this.network === 'foxone' && isUHDStream) {
+        if (this.network === 'foxone') {
           const fullUrl = urlParams ? mergeQueryParams(fullChunklistUrl, urlParams) : fullChunklistUrl;
           this.chunklistUrlMap.set(chunklistName, fullUrl);
         }
@@ -305,7 +303,7 @@ export class PlaylistHandler {
           : key.uri;
 
         const response = await axios.get<string>(fullKeyUrl, {
-          headers: headers,
+          headers,
           responseType: 'arraybuffer',
         });
 
@@ -316,11 +314,37 @@ export class PlaylistHandler {
       }
 
       this.playlist = updatedManifest;
-    } catch (e) {
-      console.log('Could not parse M3U8 properly!');
-      console.error(e);
-      //throw e;
+      return true;
+    } catch (e: any) {
+      const status = e?.response?.status;
+      console.warn('Manifest request failed for ' + this.network + ' (HTTP ' + (status || 'network') + '). Details withheld to protect signed URLs.');
+      return false;
     }
+  }
+
+  private async refreshFoxOnePlayback(): Promise<void> {
+    if (!this.refreshPlayback) {
+      throw new Error('No FOX One playback refresh callback is configured');
+    }
+
+    if (!this.refreshPromise) {
+      this.refreshPromise = (async () => {
+        const [url, headers] = await this.refreshPlayback();
+        if (!url) {
+          throw new Error('FOX One playback refresh returned no URL');
+        }
+        this.headers = headers;
+        this.currentHeaders = undefined;
+        const refreshed = await this.parseManifest(url, await this.getHeaders());
+        if (!refreshed) {
+          throw new Error('FOX One refreshed manifest could not be parsed');
+        }
+      })().finally(() => {
+        this.refreshPromise = undefined;
+      });
+    }
+
+    await this.refreshPromise;
   }
 
   public cacheChunklist(chunklistId: string): Promise<string> {
@@ -331,7 +355,7 @@ export class PlaylistHandler {
     return this.proxyChunklist(chunklistId);
   }
 
-  private async proxyChunklist(chunkListId: string): Promise<string> {
+  private async proxyChunklist(chunkListId: string, allowRefresh = true): Promise<string> {
     const proxyAllSegments = await proxySegments();
 
     try {
@@ -350,7 +374,7 @@ export class PlaylistHandler {
       }
 
       const {data: chunkList, request} = await axios.get<string>(url, {
-        headers: headers,
+        headers,
       });
 
       const processedChunklist = this.network === 'foxone' ? handleDateranges(chunkList, this.network) : chunkList;
@@ -435,10 +459,19 @@ export class PlaylistHandler {
       });
 
       return updatedChunkList;
-    } catch (e) {
-      console.log('Could not parse chunklist properly!');
-      console.error(e);
-      //throw e;
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (this.network === 'foxone' && allowRefresh && status === 403 && this.refreshPlayback) {
+        console.warn('FOX One chunklist rejected the signed URL (HTTP 403); refreshing playback and retrying once.');
+        try {
+          await this.refreshFoxOnePlayback();
+          return await this.proxyChunklist(chunkListId, false);
+        } catch (refreshError: any) {
+          const refreshStatus = refreshError?.response?.status;
+          console.warn('FOX One playback refresh/retry failed (HTTP ' + (refreshStatus || 'network') + ').');
+        }
+      }
+      console.warn('Chunklist request failed for ' + this.network + ' (HTTP ' + (status || 'network') + '). Details withheld to protect signed URLs.');
     }
   }
 
@@ -456,7 +489,7 @@ export class PlaylistHandler {
     if (this.overlayCookies) {
       if (headers.Cookie) {
         headers.Cookie = [
-          ...new Set([...(_.isArray(headers.Cookie) ? headers.Cookie : [`${headers.Cookie}`]), ...this.overlayCookies]),
+          ...new Set([...(_.isArray(headers.Cookie) ? headers.Cookie : [String(headers.Cookie)]), ...this.overlayCookies]),
         ];
       } else {
         headers.Cookie = this.overlayCookies;

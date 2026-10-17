@@ -1,0 +1,5 @@
+# Use only for Docker Buildx builds inside a nested LXC where AppArmor
+# profile administration is unavailable. This avoids asking BuildKit to
+# install a per-exec profile; it does not change the host's AppArmor policy.
+[worker.oci]
+  apparmor-profile = ""

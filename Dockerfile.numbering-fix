@@ -1,0 +1,4 @@
+FROM eplustv:foxone-profile-login
+COPY services/generate-m3u.ts /app/services/generate-m3u.ts
+COPY services/channels.ts /app/services/channels.ts
+COPY services/generate-xmltv.ts /app/services/generate-xmltv.ts
