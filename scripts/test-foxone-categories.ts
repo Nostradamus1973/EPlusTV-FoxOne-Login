@@ -1,5 +1,5 @@
 import assert from 'assert';
-import {parseFoxOneCategories} from '../services/foxone-categories';
+import {normalizeFoxOneStoredCategories, parseFoxOneCategories} from '../services/foxone-categories';
 import {getFoxOneChunklistCacheKey} from '../services/foxone-playback';
 
 const categories = (event: any) => parseFoxOneCategories(event);
@@ -22,4 +22,7 @@ assert(getFoxOneChunklistCacheKey(oldSignedUrl).includes('/live/fnc-ue2/manifest
 assert(!getFoxOneChunklistCacheKey(oldSignedUrl).includes('ZXhwPTE'), 'cache identity must not retain the expiring token');
 assert(getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEold/live/feed/6.m3u8?token=old&profile=uhd') === getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEnew/live/feed/6.m3u8?token=new&profile=uhd'), 'auth query params should not destabilize the cache identity');
 assert(getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEold/live/feed/6.m3u8?token=old&profile=uhd') !== getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEnew/live/feed/6.m3u8?token=new&profile=hd'), 'non-auth query params must remain part of the cache identity');
-console.log('FOX One regression tests passed (16 assertions).');
+assert.deepStrictEqual(normalizeFoxOneStoredCategories(['FOX One', 'FOX', '', 'Sports', 'Sports']), ['FOX One', 'FOX', 'Sports']);
+assert.deepStrictEqual(normalizeFoxOneStoredCategories(['', 'Sports']), ['FOX One', 'Sports', 'FOX']);
+assert.deepStrictEqual(normalizeFoxOneStoredCategories(null), ['FOX One', 'FOX']);
+console.log('FOX One regression tests passed (19 assertions).');
