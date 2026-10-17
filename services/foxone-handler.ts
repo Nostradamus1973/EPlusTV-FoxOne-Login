@@ -13,7 +13,7 @@ import {getRandomHex, normalTimeRange} from './shared-helpers';
 import {ClassTypeWithoutMethods, IEntry, IProvider, TChannelPlaybackInfo} from './shared-interfaces';
 import {db} from './database';
 import {usesLinear, hideStudio} from './misc-db-service';
-import {parseFoxOneCategories} from './foxone-categories';
+import {normalizeFoxOneStoredCategories, parseFoxOneCategories} from './foxone-categories';
 
 interface IAppConfig {
   network: {
@@ -113,7 +113,7 @@ const parseAirings = async (events: IFoxOneEvent[]) => {
     const categories = parseFoxOneCategories(event);
 
     if (entryExists?.from === 'foxone') {
-      await db.entries.updateAsync<IEntry, any>({from: 'foxone', id: event.entity_id}, {$set: {categories}});
+      await db.entries.updateAsync<IEntry, any>({_id: (entryExists as any)._id}, {$set: {categories}});
     }
 
     if (!entryExists) {
@@ -165,6 +165,19 @@ const parseAirings = async (events: IFoxOneEvent[]) => {
         }),
       });
     }
+  }
+
+  const existingFoxOneEntries = await db.entries.findAsync<IEntry>({from: 'foxone'});
+  let normalizedCount = 0;
+  for (const entry of existingFoxOneEntries) {
+    const categories = normalizeFoxOneStoredCategories(entry.categories);
+    if (JSON.stringify(categories) !== JSON.stringify(entry.categories)) {
+      await db.entries.updateAsync<IEntry, any>({_id: (entry as any)._id}, {$set: {categories}});
+      normalizedCount++;
+    }
+  }
+  if (normalizedCount > 0) {
+    console.log('Normalized categories for ' + normalizedCount + ' existing FOX One guide entries.');
   }
 };
 
