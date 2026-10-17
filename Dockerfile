@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:22-alpine
 
 RUN apk add --no-cache su-exec shadow yt-dlp \
     && mkdir -p /etc/udhcpc \
@@ -6,7 +6,7 @@ RUN apk add --no-cache su-exec shadow yt-dlp \
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev
 
 COPY . .
 RUN chmod +x entrypoint.sh
