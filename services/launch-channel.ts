@@ -121,12 +121,18 @@ const startChannelStream = async (channelId: string, appUrl: string) => {
       // Reset channel state
       removeChannelStatus(channelId);
     } else {
+      const refreshPlayback =
+        playingNow.from === 'foxone'
+          ? async () => foxOneHandler.getEventData(appStatus.channels[channelId].current)
+          : undefined;
+
       appStatus.channels[channelId].player = new PlaylistHandler(
         headers,
         appUrl,
         channelId,
         playingNow.from,
         appStatus.channels[channelId].current,
+        refreshPlayback,
       );
 
       try {
