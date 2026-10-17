@@ -16,7 +16,8 @@
       "@/*": [
         "*"
       ]
-    }
+    },
+    "skipLibCheck": true
   },
   "exclude": [
     "tmp",
