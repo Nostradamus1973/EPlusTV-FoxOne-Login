@@ -1,0 +1,39 @@
+name: FOX One regression and image build
+
+on:
+  pull_request:
+    branches: [foxone-profile-login]
+  push:
+    branches:
+      - foxone-profile-login
+      - 'fix/foxone-playback-refresh-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test FOX One classification and signed URL cache identity
+        run: npm run test:foxone-categories
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Lint touched TypeScript
+        run: npx eslint services/foxone-handler.ts services/playlist-handler.ts services/launch-channel.ts services/foxone-categories.ts services/foxone-playback.ts scripts/test-foxone-categories.ts
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+      - name: Build production image with Buildx
+        run: docker buildx build --load -t eplustv:ci .
+      - name: Smoke-test image
+        run: docker run --rm --network none --entrypoint sh eplustv:ci -c 'npm run test:foxone-categories && node scripts/smoke-image.js'

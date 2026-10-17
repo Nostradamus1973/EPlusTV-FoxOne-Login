@@ -19,6 +19,17 @@ If you want to try the FOX One direct-login work, use the **`foxone-profile-logi
 - An **authorized FOX One account** that you are permitted to use
 - Port 8000 available on the host, or a different host port mapped to container port 8000
 
+### Building with Buildx inside a nested LXC
+
+On a Proxmox LXC where nested Docker cannot load per-exec AppArmor profiles, use the repository's buildkitd.lxc.toml with a dedicated Buildx builder. This keeps the workaround scoped to the BuildKit worker and does not disable or modify AppArmor globally.
+
+~~~bash
+docker buildx create --name eplustv-lxc --driver docker-container --buildkitd-config buildkitd.lxc.toml
+docker buildx build --builder eplustv-lxc --load -t eplustv:local .
+~~~
+
+Use this configuration only when the outer LXC/host provides the intended isolation boundary. The regular Buildx builder remains unchanged.
+
 ### Docker Compose
 
 From a clone of this repository:
@@ -335,6 +346,17 @@ On the privileged LXC development host used for this project, Docker also requir
 Open the service in your web browser at `http://<ip>:8000`
 
 
+
+### Building with Buildx inside a nested LXC
+
+On a Proxmox LXC where nested Docker cannot load per-exec AppArmor profiles, use the repository's buildkitd.lxc.toml with a dedicated Buildx builder. This keeps the workaround scoped to the BuildKit worker and does not disable or modify AppArmor globally.
+
+~~~bash
+docker buildx create --name eplustv-lxc --driver docker-container --buildkitd-config buildkitd.lxc.toml
+docker buildx build --builder eplustv-lxc --load -t eplustv:local .
+~~~
+
+Use this configuration only when the outer LXC/host provides the intended isolation boundary. The regular Buildx builder remains unchanged.
 
 ### Docker Compose
 

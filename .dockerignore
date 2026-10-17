@@ -4,3 +4,4 @@ tmp/
 playroom/
 run*.sh
 .DS_Store
+.git/
