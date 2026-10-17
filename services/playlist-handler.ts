@@ -156,7 +156,7 @@ export class PlaylistHandler {
           const parsedUrl = new URL(realManifestUrl);
           urlParams = parsedUrl.search;
         } catch (error) {
-          console.error('Invalid URL provided:', error);
+          console.warn('Could not parse FOX One manifest URL; query forwarding skipped.');
           urlParams = '';
         }
       }
@@ -477,7 +477,7 @@ export class PlaylistHandler {
   private async getHeaders(): Promise<IHeaders> {
     let headers: IHeaders = {};
 
-    if (typeof this.headers === 'function') {
+    if (_.isFunction(this.headers)) {
       headers = await this.headers(this.eventId, this.currentHeaders);
     } else {
       headers = _.cloneDeep(this.headers);
@@ -487,8 +487,9 @@ export class PlaylistHandler {
 
     if (this.overlayCookies) {
       if (headers.Cookie) {
-        const existingCookies = Array.isArray(headers.Cookie) ? headers.Cookie : [String(headers.Cookie)];
-        headers.Cookie = [...new Set([...existingCookies, ...this.overlayCookies])];
+        headers.Cookie = [
+          ...new Set([...(_.isArray(headers.Cookie) ? headers.Cookie : [String(headers.Cookie)]), ...this.overlayCookies]),
+        ];
       } else {
         headers.Cookie = this.overlayCookies;
       }
