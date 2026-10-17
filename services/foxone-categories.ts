@@ -10,6 +10,16 @@ export interface IFoxOneCategoryEvent {
  * Classify guide entries using explicit metadata only.
  * SDR is a color range, not a resolution, so it must never imply 4K.
  */
+export const normalizeFoxOneStoredCategories = (value: unknown): string[] => {
+  const categories = Array.isArray(value)
+    ? value.filter((category): category is string => typeof category === 'string' && category.trim().length > 0)
+    : [];
+  const unique = [...new Set(categories)];
+  if (!unique.includes('FOX One')) unique.unshift('FOX One');
+  if (!unique.includes('FOX')) unique.push('FOX');
+  return unique;
+};
+
 export const parseFoxOneCategories = (event: IFoxOneCategoryEvent): string[] => {
   const categories = ['FOX One', 'FOX'];
   const tags = Array.isArray(event.tags)
@@ -39,5 +49,5 @@ export const parseFoxOneCategories = (event: IFoxOneCategoryEvent): string[] => 
     categories.push('4K');
   }
 
-  return [...new Set(categories)];
+  return normalizeFoxOneStoredCategories(categories);
 };
