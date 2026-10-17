@@ -551,7 +551,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     //console.log('getStationMap call to this.stationMap:', this.stationMap);
     return this.stationMap;
   } catch (e) {
-    console.error('getStationMap failed:', e);
+    console.warn('FOX One station-map lookup failed.');
     throw e;
   }
 };
@@ -754,8 +754,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       return true;
     } catch (e: any) {
       const status = e?.response?.status || 0;
-      const detail = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'request failed';
-      console.error('FOX One Profile token refresh failed (HTTP ' + (status || 'network') + '): ' + detail);
+      console.error('FOX One Profile token refresh failed (HTTP ' + (status || 'network') + '). Details withheld to protect session credentials.');
       return false;
     }
   };
@@ -798,8 +797,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     try {
       const entries = await this.getEvents();
       await parseAirings(entries);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.warn('FOX One event discovery failed (HTTP ' + (e?.response?.status || 'network') + ').');
       console.log('Could not parse FOX One events');
     }
   };
@@ -926,8 +925,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     try {
       const {data} = await axios.get<IAppConfig>(FOXONE_APP_CONFIG);
       this.appConfig = data;
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.warn('FOX One app-config request failed (HTTP ' + (e?.response?.status || 'network') + ').');
       console.log('Could not load API app config');
     }
   };
@@ -990,8 +989,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         this.contentEnt = finalEntitlements;
       }
       return true;
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.warn('FOX One entitlement request failed (HTTP ' + (e?.response?.status || 'network') + ').');
       return false;
     }
   };
