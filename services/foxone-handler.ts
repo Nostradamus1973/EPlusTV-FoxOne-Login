@@ -5,15 +5,15 @@ import axios from 'axios';
 import _ from 'lodash';
 import moment from 'moment';
 
-import {androidFoxOneUserAgent, userAgent} from './user-agent';
+import {androidFoxOneUserAgent} from './user-agent';
 import {configPath} from './config';
 import {useFoxOneOnly4k, useFoxOne} from './networks';
 import {IAdobeAuthFoxOne} from './adobe-helpers';
 import {getRandomHex, normalTimeRange} from './shared-helpers';
 import {ClassTypeWithoutMethods, IEntry, IProvider, TChannelPlaybackInfo} from './shared-interfaces';
 import {db} from './database';
-import {debug} from './debug';
 import {usesLinear, hideStudio} from './misc-db-service';
+import {parseFoxOneCategories} from './foxone-categories';
 
 interface IAppConfig {
   network: {
@@ -99,27 +99,6 @@ const getMaxRes = (res: string) => {
   }
 };
 
-const parseCategories = (event: IFoxOneEvent) => {
-  const categories = ['FOX One', 'FOX'];
-  for (const classifier of [...(event.tags || []), ...(event.genre_metadata.display_name || [])]) {
-    if (classifier !== null) {
-      categories.push(classifier);
-    }
-  }
-
-  if (event.sport_uri) {
-    categories.push(event.sport_uri);
-  }
-
-  const hasHDRorSDR = event.stream_types?.some(res => res === 'HDR' || res === 'SDR');
-  const isUHD = event.is_uhd;
-
-  if (hasHDRorSDR || isUHD) {
-    categories.push('4K');
-  }
-  return [...new Set(categories)];
-};
-
 const parseAirings = async (events: IFoxOneEvent[]) => {
   const useLinear = await usesLinear();
   const hide_studio = await hideStudio();
@@ -130,6 +109,12 @@ const parseAirings = async (events: IFoxOneEvent[]) => {
 
   for (const event of events) {
     const entryExists = await db.entries.findOneAsync<IEntry>({id: `${event.entity_id}`});
+
+    const categories = parseFoxOneCategories(event);
+
+    if (entryExists?.from === 'foxone') {
+      await db.entries.updateAsync<IEntry, any>({from: 'foxone', id: event.entity_id}, {$set: {categories}});
+    }
 
     if (!entryExists) {
       const isLinear = useLinear;
@@ -153,8 +138,6 @@ const parseAirings = async (events: IFoxOneEvent[]) => {
       if (end.isBefore(now) || start.isAfter(inTwoDays)) {
         continue;
       }
-
-      const categories = parseCategories(event);
 
       if (meta.only4k && !_.some(categories, category => category === '4K')) {
         continue;
@@ -195,12 +178,7 @@ const willAuthTokenExpire = (token: IAdobeAuthFoxOne): boolean =>
 const willProfileTokenExpire = (token: IProfileAuth): boolean =>
   new Date().valueOf() + 3600 * 1000 * 24 > (token?.tokenExpiration || 0);
 
-const checkEventSku = (entitlements, event: IFoxOneEvent): boolean => {
-  if (event.content_sku && Array.isArray(entitlements)) {
-    return true;
-  }
-  return false;
-};
+
 
 class FoxOneHandler {
   public adobe_device_id?: string;
@@ -237,18 +215,18 @@ class FoxOneHandler {
         enabled: useFoxOne,
         linear_channels: [
           {
+            callSign: '',
             enabled: false,
             id: 'FOX',
             name: 'FOX',
             tmsId: '',
-            callSign: '',
           },
           {
+            callSign: '',
             enabled: false,
             id: 'MNTV',
             name: 'MyNetwork TV',
             tmsId: '',
-            callSign: '',
           },
           {
             enabled: false,
@@ -317,9 +295,9 @@ class FoxOneHandler {
           },
         ],
         meta: {
+          local_station_call_signs: '',
           only4k: useFoxOneOnly4k,
           uhd: getMaxRes(process.env.MAX_RESOLUTION) === 'UHD/HDR',
-          local_station_call_signs: '',
         },
         name: 'foxone',
         tokens: data,
@@ -360,13 +338,9 @@ class FoxOneHandler {
       await this.getAppConfig();
     }
 
-    const useLinear = await usesLinear();
     const events: IFoxOneEvent[] = [];
 
-    const [now, inTwoDays] = normalTimeRange();
 
-    const startTime = now.unix();
-    const endTime = inTwoDays.unix();
 
     try {
       await this.getLocation();
@@ -380,13 +354,13 @@ class FoxOneHandler {
             'User-Agent': androidFoxOneUserAgent,
             authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-apikey': this.appConfig.network.apikey,
-            'x-platform-location': this.platform_location,
+            'x-fox-content-entitlement': this.contentEntitlement || '',
+            'x-fox-dma': this.homeMetroCode || '',
+            'x-fox-home-dma': this.homeMetroCode || '',
+            'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-zipcode': this.platform_zip,
             'x-home-zipcode': this.homeZipCode || '',
-            'x-fox-home-dma': this.homeMetroCode || '',
-            'x-fox-dma': this.homeMetroCode || '',
-            'x-fox-content-entitlement': this.contentEntitlement || '',
-            'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
+            'x-platform-location': this.platform_location,
           },
         },
       );
@@ -404,13 +378,13 @@ class FoxOneHandler {
             'User-Agent': androidFoxOneUserAgent,
             authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-apikey': this.appConfig.network.apikey,
-            'x-platform-location': this.platform_location,
+            'x-fox-content-entitlement': this.contentEntitlement || '',
+            'x-fox-dma': this.homeMetroCode || '',
+            'x-fox-home-dma': this.homeMetroCode || '',
+            'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-zipcode': this.platform_zip,
             'x-home-zipcode': this.homeZipCode || '',
-            'x-fox-home-dma': this.homeMetroCode || '',
-            'x-fox-dma': this.homeMetroCode || '',
-            'x-fox-content-entitlement': this.contentEntitlement || '',
-            'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
+            'x-platform-location': this.platform_location,
           },
         },
       );
@@ -451,13 +425,13 @@ class FoxOneHandler {
             'User-Agent': androidFoxOneUserAgent,
             authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-apikey': this.appConfig.network.apikey,
-            'x-platform-location': this.platform_location,
+            'x-fox-content-entitlement': this.contentEntitlement || '',
+            'x-fox-dma': this.homeMetroCode || '',
+            'x-fox-home-dma': this.homeMetroCode || '',
+            'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
             'x-fox-zipcode': this.platform_zip,
             'x-home-zipcode': this.homeZipCode || '',
-            'x-fox-home-dma': this.homeMetroCode || '',
-            'x-fox-dma': this.homeMetroCode || '',
-            'x-fox-content-entitlement': this.contentEntitlement || '',
-            'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
+            'x-platform-location': this.platform_location,
           },
         },
       );
@@ -476,13 +450,13 @@ class FoxOneHandler {
                 'User-Agent': androidFoxOneUserAgent,
                 authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
                 'x-fox-apikey': this.appConfig.network.apikey,
-                'x-platform-location': this.platform_location,
+                'x-fox-content-entitlement': this.contentEntitlement || '',
+                'x-fox-dma': this.homeMetroCode || '',
+                'x-fox-home-dma': this.homeMetroCode || '',
+                'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
                 'x-fox-zipcode': this.platform_zip,
                 'x-home-zipcode': this.homeZipCode || '',
-                'x-fox-home-dma': this.homeMetroCode || '',
-                'x-fox-dma': this.homeMetroCode || '',
-                'x-fox-content-entitlement': this.contentEntitlement || '',
-                'x-fox-userauth': `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
+                'x-platform-location': this.platform_location,
               },
             },
           );
@@ -493,14 +467,12 @@ class FoxOneHandler {
             console.warn(`No items found in container ${uri}`);
           }
 
-        } catch (err) {
-          console.warn(`Failed to fetch container ${uri}:`, err);
+        } catch (err: any) {
+          console.warn('FOX One event container request failed. Details withheld to protect session credentials.');
         }
       }
 
-      const allEntityIds: string[] = allContainerData
-        .filter(item => item && typeof item === 'object' && item.entity_id)
-        .map(item => item.entity_id);
+
 
       const allEvents = allContainerData.map(event => {
         if (!event.genre_metadata) {
@@ -516,9 +488,9 @@ class FoxOneHandler {
         if (call_sign && network && gracenote?.station_id) {
           if (!stationMap[network]) {
             stationMap[network] = {
+              callSign: call_sign,
               network,
               stationId: gracenote.station_id,
-              callSign: call_sign,
             };
           }
         }
@@ -530,16 +502,14 @@ class FoxOneHandler {
       const {linear_channels} = await db.providers.findOneAsync<IProvider>({name: 'foxone'});
       const updatedChannels = linear_channels.map(channel => {
         if (channel.id === 'FOX') {
-          return {...channel, tmsId: this.stationMap['FOX']?.stationId, callSign: this.stationMap['FOX']?.callSign};
+          return {...channel, callSign: this.stationMap['FOX']?.callSign, tmsId: this.stationMap['FOX']?.stationId};
         } else if (channel.id === 'MNTV') {
-          return {...channel, tmsId: this.stationMap['MNTV']?.stationId, callSign: this.stationMap['MNTV']?.callSign};
+          return {...channel, callSign: this.stationMap['MNTV']?.callSign, tmsId: this.stationMap['MNTV']?.stationId};
         } 
         return channel;
       });
       await db.providers.updateAsync<IProvider<TFoxOneTokens>, any>({name: 'foxone'}, {$set: {linear_channels: updatedChannels}});
       //console.log('getEvents: Updated linear_channels with stationMap');
-      const provider = await db.providers.findOneAsync({name: 'foxone'});
-      //console.log('linear_channels:', provider.linear_channels);
 
       _.forEach(allEvents, m => {
         if (!m.content_sku) {
@@ -568,8 +538,9 @@ class FoxOneHandler {
         }
       });
 
-    } catch (e) {
-      console.error('Error while loading FoxOne events:', e);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      console.error('FOX One event discovery failed (HTTP ' + (status || 'network') + '). Details withheld to protect session credentials.');
     }
     return events;
   };
@@ -598,8 +569,6 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
     );
 
     const locationData = locatorData?.data?.metadata;
-    const zipCodeData = (locatorData?.data?.results || [])[0];
-
     this.platform_location = locationData?.['x-platform-location'] || 'Unknown Location';
     this.platform_zip = FOX_ONE_HOME_ZIP;
   }
@@ -613,20 +582,20 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       }
 
       try {
-        const response = await axios.put(
+        await axios.put(
           'https://ent.fox.com/user-preferences/v1/home-location',
           { home_zip_code: this.platform_zip },
           {
             headers: {
-              'user-agent': androidFoxOneUserAgent,
               'authorization': `bearer ${this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken}`,
-              'x-api-key': this.appConfig.network.apikey,
-              'content-type': 'application/json'
+              'content-type': 'application/json',
+              'user-agent': androidFoxOneUserAgent,
+              'x-api-key': this.appConfig.network.apikey
             }
           }
         );
       } catch (error) {
-        console.error('Error updating zip code:', error.response?.data || error.message);
+        console.warn('FOX One home-location update failed (HTTP ' + (error?.response?.status || 'network') + ').');
         throw error;
       }
       const { data: userEnt } = await axios.get<any>(
@@ -634,8 +603,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         {
           headers: {
             'User-Agent': androidFoxOneUserAgent,
-            'x-api-key': this.appConfig.network.apikey || '',
             authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
+            'x-api-key': this.appConfig.network.apikey || '',
             'x-platform-location': this.platform_location || '',
           },
         }
@@ -656,13 +625,13 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         {
           headers: {
             'User-Agent': androidFoxOneUserAgent,
-            'x-fox-apikey': this.appConfig.network.apikey,
             authorization: `Bearer ${this.adobe_prelim_auth_token.accessToken}`,
-            'x-platform-location': this.platform_location || '',
+            'x-fox-apikey': this.appConfig.network.apikey,
+            'x-fox-dma': this.homeMetroCode || '',
+            'x-fox-home-dma': this.homeMetroCode || '',
             'x-fox-zipcode': this.platform_zip || '',
             'x-home-zipcode': this.homeZipCode || '',
-            'x-fox-home-dma': this.homeMetroCode || '',
-            'x-fox-dma': this.homeMetroCode || '',
+            'x-platform-location': this.platform_location || '',
           },
         }
       );
@@ -677,40 +646,40 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       }
 
     } catch (e) {
-      console.error('Error in getUserEntitlements:', e);
+      console.warn('FOX One user-entitlement setup failed (HTTP ' + (e?.response?.status || 'network') + ').');
     }
   }
 
   public loginWithProfile = async (email: string, password: string, deviceId: string): Promise<{ok: boolean; status: number; message: string}> => {
     if (!this.appConfig) await this.getAppConfig();
-    if (!this.appConfig?.network?.apikey) return {ok: false, status: 0, message: 'FOX One app configuration did not provide an API key'};
+    if (!this.appConfig?.network?.apikey) return {message: 'FOX One app configuration did not provide an API key', ok: false, status: 0};
 
     try {
       const {data, status} = await axios.post<any>(
         'https://id.fox.com/account/login/v2',
-        {email, password, deviceId, isTermsOfServiceAgreementNeeded: false, receipts: []},
+        {deviceId, email, isTermsOfServiceAgreementNeeded: false, password, receipts: []},
         {headers: {'Content-Type': 'application/json; charset=utf-8', 'User-Agent': androidFoxOneUserAgent, 'x-api-key': this.appConfig.network.apikey, 'x-delegated-auth-flow': 'true'}},
       );
 
       const accessToken = data?.accessToken;
-      if (!accessToken) return {ok: false, status, message: 'Profile API login returned no access token'};
+      if (!accessToken) return {message: 'Profile API login returned no access token', ok: false, status};
 
-      this.profile_auth = {accessToken, refreshToken: data?.refreshToken, idToken: data?.idToken, tokenExpiration: data?.tokenExpiration ?? data?.expiresAt ?? data?.expiresIn};
+      this.profile_auth = {accessToken, idToken: data?.idToken, refreshToken: data?.refreshToken, tokenExpiration: data?.tokenExpiration ?? data?.expiresAt ?? data?.expiresIn};
       this.adobe_device_id = deviceId;
-      this.adobe_prelim_auth_token = {accessToken, tokenExpiration: this.profile_auth.tokenExpiration || Date.now() + 3600000, viewerId: data?.viewerId || '', deviceId, profileId: data?.profileId || ''};
+      this.adobe_prelim_auth_token = {accessToken, deviceId, profileId: data?.profileId || '', tokenExpiration: this.profile_auth.tokenExpiration || Date.now() + 3600000, viewerId: data?.viewerId || ''};
 
       const entitlementOk = await this.getEntitlements();
       if (!entitlementOk) {
         this.adobe_prelim_auth_token = undefined;
-        return {ok: false, status, message: 'Profile login succeeded, but the FOX One DTC entitlement service rejected the returned access token'};
+        return {message: 'Profile login succeeded, but the FOX One DTC entitlement service rejected the returned access token', ok: false, status};
       }
 
       await this.save();
-      return {ok: true, status, message: 'Direct FOX One Profile login succeeded and the returned token was accepted by the DTC entitlement service'};
+      return {message: 'Direct FOX One Profile login succeeded and the returned token was accepted by the DTC entitlement service', ok: true, status};
     } catch (e: any) {
       const status = e?.response?.status || 0;
       const detail = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'request failed';
-      return {ok: false, status, message: `Profile API login failed: ${detail}`};
+      return {message: `Profile API login failed: ${detail}`, ok: false, status};
     }
   };
 
@@ -741,8 +710,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'User-Agent': androidFoxOneUserAgent,
-          'x-api-key': apiKey,
           authorization: this.profile_auth?.accessToken || '',
+          'x-api-key': apiKey,
           'x-delegated-auth-flow': 'true',
         },
       });
@@ -762,8 +731,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       this.profile_auth = {
         ...this.profile_auth,
         accessToken,
-        refreshToken: data?.refreshToken || refreshToken,
         idToken: data?.idToken || this.profile_auth?.idToken,
+        refreshToken: data?.refreshToken || refreshToken,
         tokenExpiration: normalizedExpiration,
       };
 
@@ -841,9 +810,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         await this.getAppConfig();
       }
 
-      let data;
-
-      data = await this.getStreamData(eventId);
+      const data = await this.getStreamData(eventId);
 
       if (!data || !data?.stream?.playbackUrl) {
         throw new Error('Could not get stream data. Event might be upcoming, ended, or in blackout...');
@@ -870,7 +837,7 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         },
       ];
     } catch (e) {
-      console.error(e);
+      console.error('FOX One playback request failed. Details withheld to protect session credentials.');
       console.log('Could not get stream information!');
     }
   };
@@ -925,22 +892,31 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
               'User-Agent': androidFoxOneUserAgent,
               authorization: this.profile_auth?.accessToken || this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken,
               'x-api-key': this.appConfig.network.apikey,
-              'x-platform-location': this.platform_location,
               'x-device-capabilities': deviceCapabilities,
+              'x-platform-location': this.platform_location,
             },
           },
         );
 
         if (data?.stream?.playbackUrl) {
+          const stream = data.stream;
+          const qualityMetadata: Record<string, string | number | boolean | null> = {};
+          for (const key of ['resolution', 'videoResolution', 'video_range', 'videoRange', 'hdr', 'isHdr', 'uhd', 'isUhd', 'quality', 'profile']) {
+            const value = stream[key];
+            if (['string', 'number', 'boolean'].includes(typeof value)) {
+              qualityMetadata[key] = value;
+            }
+          }
+          console.log('FOX One ' + streamOrder[a] + ' request returned a playback URL; safe quality metadata: ' + JSON.stringify(qualityMetadata));
           watchData = data;
           break;
         }
-      } catch (e) {
-        console.log(
-          `Could not get stream data for ${streamOrder[a]}. ${
-            streamOrder[a + 1] ? `Trying to get ${streamOrder[a + 1]} next...` : ''
-          }`,
-        );
+      } catch (e: any) {
+        const status = e?.response?.status;
+        const next = streamOrder[a + 1];
+        console.warn('FOX One ' + streamOrder[a] + ' request failed (HTTP ' + (status || 'network') + '). ' +
+          (next ? 'Trying ' + next + ' next. ' : 'No further quality fallback. ') +
+          'Details withheld to protect session credentials.');
       }
     }
     return watchData;
@@ -971,11 +947,11 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
             'User-Agent': androidFoxOneUserAgent,
             authorization: this.adobe_auth?.accessToken || this.adobe_prelim_auth_token?.accessToken,
             'x-api-key': this.appConfig.network.apikey,
-            'x-signature-enabled': 'true',
-            'x-refresh-token': this.profile_auth?.refreshToken || '',
             'x-delegated-auth-flow': 'true',
-            'x-platform-location': this.platform_location,
             'x-fox-zipcode': this.platform_zip,
+            'x-platform-location': this.platform_location,
+            'x-refresh-token': this.profile_auth?.refreshToken || '',
+            'x-signature-enabled': 'true',
           },
         },
       );
@@ -995,17 +971,17 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       if (Array.isArray(this.entArray) && this.entArray.length > 0) {
         const transformedEntitlements = this.entArray.map((item: any) => ({
           content_sku: item.contentSku,
-          proxied_entitlement: item.proxiedEntitlement,
-          entitlement_types: item.entitlementType || []
+          entitlement_types: item.entitlementType || [],
+          proxied_entitlement: item.proxiedEntitlement
         }));
 
         const finalEntitlements = {
           favorites: {
-            teams: [],
-            series: [],
             leagues: [],
             movies: [],
+            series: [],
             specials: [],
+            teams: [],
           },
           user_entitlement: transformedEntitlements,
           user_onboarding_preferences: []
@@ -1042,8 +1018,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
 
       this.adobe_prelim_auth_token = data;
       await this.save();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.warn('FOX One preliminary-token request failed (HTTP ' + (e?.response?.status || 'network') + ').');
       console.log('Could not get information to start Fox One login flow');
     }
   };
@@ -1077,8 +1053,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       console.log(data.code)
 
       return data.code;
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.warn('FOX One authentication-code request failed (HTTP ' + (e?.response?.status || 'network') + ').');
       console.log('Could not start the authentication process for Fox One!');
     }
   };
@@ -1115,11 +1091,11 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
       if (e.response?.status !== 404) {
         if (showAuthnError) {
           if (e.response?.status === 410) {
-            console.error(e);
+            console.warn('FOX One Adobe AuthN token expired (HTTP 410).');
             console.log('Adobe AuthN token has expired for FOX One');
           }
         } else if (e.response?.status !== 410) {
-          console.error(e);
+          console.warn('FOX One provider-token check failed (HTTP ' + (e?.response?.status || 'network') + ').');
           console.log('Could not get provider token data for Fox One!');
         }
       }
