@@ -1,4 +1,14 @@
 /**
+ * FOX One playlists are cached in memory per channel, not per requesting client.
+ * Use origin-relative proxy paths so the cached playlist works for Emby and
+ * other clients regardless of which host first requested the channel.
+ */
+export const getFoxOneProxyBaseUrls = (channel: string): {baseProxyUrl: string; baseUrl: string} => ({
+  baseProxyUrl: '/chunklist/' + channel + '/',
+  baseUrl: '/channels/' + channel + '/',
+});
+
+/**
  * FOX One embeds an expiring signed token in the first path segment before /live/.
  * Use a token-free URL as cache identity, while retaining the full signed URL for requests.
  */
