@@ -36,4 +36,4 @@ jobs:
       - name: Build production image with Buildx
         run: docker buildx build --load -t eplustv:ci .
       - name: Smoke-test image
-        run: docker run --rm --network none --entrypoint sh eplustv:ci -c 'npm run test:foxone-categories && node -e "require(\"sharp\")({create:{width:1,height:1,channels:3,background:\"#fff\"}}).png().toBuffer().then(b=>console.log(\"sharp-ok\",b.length)).catch(e=>{console.error(e.message);process.exit(1)})"'
+        run: docker run --rm --network none --entrypoint sh eplustv:ci -c 'npm run test:foxone-categories && node scripts/smoke-image.js'
