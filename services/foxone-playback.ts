@@ -6,7 +6,11 @@ export const getFoxOneChunklistCacheKey = (url: string): string => {
   try {
     const parsed = new URL(url);
     parsed.pathname = parsed.pathname.replace(/^\/ZXhwPTE[^/]*(?=\/live\/)/, '');
-    parsed.search = '';
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (/(^|[-_])(token|exp|expires|sig|signature|mac|auth|policy|keypair|hdnea|credential|accesskey|security-token)([-_]|$)/i.test(key)) {
+        parsed.searchParams.delete(key);
+      }
+    }
     parsed.hash = '';
     return parsed.toString();
   } catch {
