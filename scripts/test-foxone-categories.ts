@@ -20,4 +20,6 @@ const newSignedUrl = 'https://cdn.example.test/ZXhwPTE3OTIyMjY5OTk7bWFjPW5ldw/li
 assert.strictEqual(getFoxOneChunklistCacheKey(oldSignedUrl), getFoxOneChunklistCacheKey(newSignedUrl), 'signed token refresh must preserve the chunklist cache identity');
 assert(getFoxOneChunklistCacheKey(oldSignedUrl).includes('/live/fnc-ue2/manifest/abc/6.m3u8'), 'cache identity should retain the resource path');
 assert(!getFoxOneChunklistCacheKey(oldSignedUrl).includes('ZXhwPTE'), 'cache identity must not retain the expiring token');
-console.log('FOX One regression tests passed (14 assertions).');
+assert(getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEold/live/feed/6.m3u8?token=old&profile=uhd') === getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEnew/live/feed/6.m3u8?token=new&profile=uhd'), 'auth query params should not destabilize the cache identity');
+assert(getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEold/live/feed/6.m3u8?token=old&profile=uhd') !== getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEnew/live/feed/6.m3u8?token=new&profile=hd'), 'non-auth query params must remain part of the cache identity');
+console.log('FOX One regression tests passed (16 assertions).');
