@@ -1,6 +1,6 @@
 import assert from 'assert';
 import {normalizeFoxOneStoredCategories, parseFoxOneCategories} from '../services/foxone-categories';
-import {getFoxOneChunklistCacheKey} from '../services/foxone-playback';
+import {getFoxOneChunklistCacheKey, getFoxOneProxyBaseUrls} from '../services/foxone-playback';
 
 const categories = (event: any) => parseFoxOneCategories(event);
 
@@ -18,6 +18,9 @@ assert.deepStrictEqual(categories({tags: ['Football', 'Football']}), ['FOX One',
 const oldSignedUrl = 'https://cdn.example.test/ZXhwPTE3OTIyMjYzODk7bWFjPW9sZA/live/fnc-ue2/manifest/abc/6.m3u8?token=old';
 const newSignedUrl = 'https://cdn.example.test/ZXhwPTE3OTIyMjY5OTk7bWFjPW5ldw/live/fnc-ue2/manifest/abc/6.m3u8?token=new';
 assert.strictEqual(getFoxOneChunklistCacheKey(oldSignedUrl), getFoxOneChunklistCacheKey(newSignedUrl), 'signed token refresh must preserve the chunklist cache identity');
+const foxProxyUrls = getFoxOneProxyBaseUrls('3606');
+assert.deepStrictEqual(foxProxyUrls, {baseProxyUrl: '/chunklist/3606/', baseUrl: '/channels/3606/'}, 'FOX One proxy paths must be origin-relative so cached playlists work from Emby');
+assert(!JSON.stringify(foxProxyUrls).includes('127.0.0.1'), 'FOX One proxy paths must never bake in a loopback host');
 assert(getFoxOneChunklistCacheKey(oldSignedUrl).includes('/live/fnc-ue2/manifest/abc/6.m3u8'), 'cache identity should retain the resource path');
 assert(!getFoxOneChunklistCacheKey(oldSignedUrl).includes('ZXhwPTE'), 'cache identity must not retain the expiring token');
 assert(getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEold/live/feed/6.m3u8?token=old&profile=uhd') === getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEnew/live/feed/6.m3u8?token=new&profile=uhd'), 'auth query params should not destabilize the cache identity');
@@ -25,4 +28,4 @@ assert(getFoxOneChunklistCacheKey('https://cdn.example.test/ZXhwPTEold/live/feed
 assert.deepStrictEqual(normalizeFoxOneStoredCategories(['FOX One', 'FOX', '', 'Sports', 'Sports']), ['FOX One', 'FOX', 'Sports']);
 assert.deepStrictEqual(normalizeFoxOneStoredCategories(['', 'Sports']), ['FOX One', 'Sports', 'FOX']);
 assert.deepStrictEqual(normalizeFoxOneStoredCategories(null), ['FOX One', 'FOX']);
-console.log('FOX One regression tests passed (19 assertions).');
+console.log('FOX One regression tests passed (21 assertions).');

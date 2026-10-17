@@ -6,7 +6,7 @@ import {userAgent} from './user-agent';
 import {IHeaders, THeaderInfo, TChannelPlaybackInfo} from './shared-interfaces';
 import {cacheLayer, promiseCache} from './caching';
 import {proxySegments} from './misc-db-service';
-import {getFoxOneChunklistCacheKey} from './foxone-playback';
+import {getFoxOneChunklistCacheKey, getFoxOneProxyBaseUrls} from './foxone-playback';
 
 const isRelativeUrl = (url?: string): boolean => (url?.startsWith('http') ? false : true);
 const cleanUrl = (url: string): string => url.replace(/(\[.*\])/gm, '').replace(/(?<!:)\/\//gm, '/');
@@ -103,8 +103,9 @@ export class PlaylistHandler {
   constructor(headers: THeaderInfo, appUrl: string, channel: string, network: string, eventId: string | number, refreshPlayback?: () => Promise<TChannelPlaybackInfo>) {
     this.headers = headers;
     this.channel = channel;
-    this.baseUrl = `${appUrl}/channels/${channel}/`;
-    this.baseProxyUrl = `${appUrl}/chunklist/${channel}/`;
+    const foxOneProxyUrls = network === 'foxone' ? getFoxOneProxyBaseUrls(channel) : undefined;
+    this.baseUrl = foxOneProxyUrls?.baseUrl ?? appUrl + '/channels/' + channel + '/';
+    this.baseProxyUrl = foxOneProxyUrls?.baseProxyUrl ?? appUrl + '/chunklist/' + channel + '/';
     this.network = network;
     this.eventId = eventId;
     this.refreshPlayback = refreshPlayback;
