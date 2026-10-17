@@ -1,4 +1,3 @@
-Pseudo-terminal will not be allocated because stdin is not a terminal.
 import _ from 'lodash';
 import xml from 'xml';
 import moment from 'moment';
